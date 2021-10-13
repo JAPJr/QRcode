@@ -23,10 +23,10 @@ decToBin n = addBits (n `div` 2)  (getLowBit n : "")
           |num == 0 = bin
           |otherwise = addBits (num `div` 2) (getLowBit num : bin)
 
-paddToN :: Int -> Binary -> Binary
-paddToN n bin = replicate (n - length bin) '0' ++ bin
+padToN :: Int -> Binary -> Binary
+padToN n bin = replicate (n - length bin) '0' ++ bin
 
-paddRightN n bin = bin ++ replicate n '0'
+padRightN n bin = bin ++ replicate n '0'
 
 data Mode = Numeric | Alpha | Byte | Kanji deriving Eq
 data ECLevel = L | M | Q | H deriving Eq
@@ -53,7 +53,7 @@ nDataWords ver ecLevel = fromJust $ lookup ecLevel $ fromJust $ lookup ver nWord
 -- BYTE MODE
 
 charTo8Bits :: Char -> Binary
-charTo8Bits = paddToN 8 . decToBin . fromEnum
+charTo8Bits = padToN 8 . decToBin . fromEnum
 
 encodeText :: String -> Binary
 encodeText txt = foldr addCharCodes "" txt
@@ -68,17 +68,17 @@ alphaVal char = fromJust $ lookup char alphaNumericTable
 
 alphaCodeToBin :: [Int] -> Binary
 alphaCodeToBin [] = ""
-alphaCodeToBin (a : []) = paddToN 6 $ decToBin a
-alphaCodeToBin (a1 : a2 : as) = (paddToN 11 $ decToBin (a1 * 45 + a2) ) ++ alphaCodeToBin as
+alphaCodeToBin (a : []) = padToN 6 $ decToBin a
+alphaCodeToBin (a1 : a2 : as) = (padToN 11 $ decToBin (a1 * 45 + a2) ) ++ alphaCodeToBin as
 
 
-alphaEncodeText text ver ecLevel = paddRightN nPadding unpaddedCode 
+alphaEncodeText text ver ecLevel = terminate $ padTo8Mult $ pad4Max (modeInd ++ charCountCode ++ dataCode) 
   where modeInd = modeIndicator Alpha
-        charCount = paddToN 9 $ decToBin $ length text
+        charCountCode = padToN 9 $ decToBin $ length text
         dataCode = alphaCodeToBin $ map alphaVal text 
-        unpaddedCode = modeInd ++ charCount ++ dataCode
-        codeLength = length unpaddedCode
-        diff = 8 * nDataWords ver ecLevel - codeLength 
-        nPadding
-          |diff < 5  = diff
-          |otherwise = 4               
+        reqBits = 8 * (nDataWords ver ecLevel)
+        pad4Max code 
+          |(reqBits - length code) < 5  = padRightN (reqBits - length code) code
+          |otherwise                    = padRightN 4 code
+        padTo8Mult code = padRightN (8 - length code `mod` 8) code
+        terminate code = code ++ take (reqBits - length code)  (cycle "1110110000010001")
